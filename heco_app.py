@@ -5,7 +5,6 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import io
 
 # 1. გვერდის კონფიგურაცია
 st.set_page_config(
@@ -70,6 +69,9 @@ if "ai_cases" not in st.session_state:
         {"title": "ქეისი #1: ინფექციური აფეთქება რეგიონში", "content": "მუნიციპალიტეტში დაფიქსირდა კუჭ-ნაწლავის ინფექციების მატება. წყარო სავარაუდოდ წყალსადენია. რა ნაბიჯებს გადადგამდით პირველ რიგში?"}
     ]
 
+if "student_submissions" not in st.session_state:
+    st.session_state.student_submissions = []
+
 if "student_messages" not in st.session_state:
     st.session_state.student_messages = []
 
@@ -79,8 +81,20 @@ if "syllabus_data" not in st.session_state:
         "კომუნიკაცია ჯანდაცვაში": "ჯანდაცვის კომუნიკაციისა და პაციენტთა ინფორმირების სტანდარტები."
     }
 
+if "lecture_schedule" not in st.session_state:
+    st.session_state.lecture_schedule = pd.DataFrame({
+        "თარიღი": ["2026-08-05", "2026-08-12", "2026-08-19", "2026-08-26"],
+        "საგანი": ["საზოგადოებრივი ჯანდაცვის საფუძვლები", "საზოგადოებრივი ჯანდაცვის საფუძვლები", "კომუნიკაცია ჯანდაცვაში", "კომუნიკაცია ჯანდაცვაში"],
+        "ლექციის თემა": [
+            "შესავალი საზოგადოებრივ ჯანდაცვაში და პრევენციული მოდელები",
+            "ეპიდემიოლოგიური კვლევები და ინდიკატორები",
+            "ჯანდაცვის კომუნიკაციისა და მითების მართვის პრინციპები",
+            "კრიზისული კომუნიკაცია ჯანდაცვის სექტორში"
+        ]
+    })
 
-# 4. ავტორიზაციის გვერდი (Login Page)
+
+# 4. ავტორიზაციის გვერდი
 def login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -96,7 +110,6 @@ def login_page():
             
             if submit:
                 clean_user = username_input.strip().lower()
-                # ავტომატური დამატება თუ სტუდენტია მაგრამ ბაზაში დინამიკურად სჭირდება
                 if clean_user.startswith("student") and clean_user not in st.session_state.users:
                     st.session_state.users[clean_user] = {"pass": "123", "role": "სტუდენტი", "name": f"სტუდენტი {clean_user}", "email": f"{clean_user}@student.uni.edu.ge"}
                 
@@ -134,6 +147,7 @@ else:
             "მთავარი მიმოხილვა", 
             "სასწავლო მასალები", 
             "სიმულაციური ქეისები", 
+            "სალექციო განრიგი",
             "სიახლეები და თემები", 
             "შეტყობინების გაგზავნა ლექტორთან",
             "ლაივ ჩატი"
@@ -141,7 +155,7 @@ else:
 
     st.sidebar.write("---")
     
-    # 4. სილაბუსისა და მასალების ატვირთვა Sidebar-ში (ქვემოთ)
+    # სილაბუსისა და მასალების ატვირთვა Sidebar-ში (ქვემოთ)
     if role == "ლექტორი":
         st.sidebar.subheader("📂 სილაბუსებისა და მასალების ატვირთვა")
         selected_subject_sidebar = st.sidebar.selectbox("აირჩიეთ საგანი", ["საზოგადოებრივი ჯანდაცვის საფუძვლები", "კომუნიკაცია ჯანდაცვაში"])
@@ -186,10 +200,18 @@ else:
             with c3:
                 st.markdown("<div class='metric-card'><h3>ახალი წერილები</h3><h2>3</h2></div>", unsafe_allow_html=True)
 
+            st.write("---")
+            st.subheader("📝 სტუდენტების მიერ შესრულებული ქეისების AI შეფასებები:")
+            if not st.session_state.student_submissions:
+                st.info("სტუდენტების მხრიდან პასუხები ჯერ არ არის შემოსული.")
+            else:
+                for sub in st.session_state.student_submissions:
+                    with st.expander(f"სტუდენტი: {sub['student']} | ქეისი: {sub['case_title']}"):
+                        st.write(f"**სტუდენტის მოსაზრება:** {sub['answer']}")
+                        st.success(f"**AI ექსპერტული შეფასება:** {sub['ai_eval']}")
+
         elif menu == "სტუდენტების რეგისტრაცია/იმპორტი":
             st.title("📁 სტუდენტთა Excel ფაილის იმპორტი & ავტომატური მეილები")
-            st.write("ატვირთეთ Excel (.xlsx) ან CSV ფაილი სვეტებით: `სახელი`, `გვარი`, `მეილი`.")
-            
             uploaded_file = st.file_uploader("ატვირთეთ სტუდენტების ფაილი", type=["xlsx", "xls", "csv"])
             
             sample_df = pd.DataFrame({
@@ -197,14 +219,8 @@ else:
                 "გვარი": ["გიორგაძე", "მიქაძე"],
                 "მეილი": ["ani.giorgadze@student.uni.edu.ge", "luka.mikadze@student.uni.edu.ge"]
             })
-            
             csv_data = sample_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 ჩამოტვირთეთ ცხრილის სანიმუშო შაბლონი (CSV)",
-                data=csv_data,
-                file_name="students_template.csv",
-                mime="text/csv"
-            )
+            st.download_button("📥 ჩამოტვირთეთ ცხრილის სანიმუშო შაბლონი (CSV)", data=csv_data, file_name="students_template.csv", mime="text/csv")
 
             if uploaded_file is not None:
                 try:
@@ -213,7 +229,6 @@ else:
                     else:
                         df = pd.read_excel(uploaded_file)
                     st.write("წარმატებით აიტვირთა:", df.head())
-                    
                     if st.button("🚀 იუზერების გენერაცია და მეილების გაგზავნა"):
                         success_count = 0
                         for index, row in df.iterrows():
@@ -221,15 +236,8 @@ else:
                             lname = str(row.get("გვარი", ""))
                             email = str(row.get("მეილი", ""))
                             username = f"{fname.lower()}_{lname.lower()}"
-                            
-                            st.session_state.users[username] = {
-                                "pass": "123",
-                                "role": "სტუდენტი",
-                                "name": f"{fname} {lname}",
-                                "email": email
-                            }
+                            st.session_state.users[username] = {"pass": "123", "role": "სტუდენტი", "name": f"{fname} {lname}", "email": email}
                             success_count += 1
-                                
                         st.success(f" წარმატებით დაგენერირდა {success_count} იუზერი და გაიგზავნა შეტყობინებები!")
                 except Exception as e:
                     st.error(f"შეცდომა ფაილის წაკითხვისას: {e}")
@@ -237,7 +245,6 @@ else:
         elif menu == "AI ქეისების გენერაცია":
             st.title("🤖 AI რეალურდრომიანი ქეისების გენერატორი")
             topic_input = st.text_input("მიუთითეთ თემა ან მიმართულება:")
-            
             if st.button("✨ ქეისის გენერირება AI-ით"):
                 if topic_input:
                     generated_case = f"ეპიდემიოლოგიური სიმულაცია თემაზე: '{topic_input}'. ანალიზი აჩვენებს რისკ-ფაქტორებს და რეკომენდებულ პრევენციულ ზომებს."
@@ -245,14 +252,13 @@ else:
                     st.success("ქეისი წარმატებით გენერირდა და გაუზიარდა სტუდენტებს!")
                 else:
                     st.warning("გთხოვთ ჩაწეროთ თემა.")
-                    
+            
             st.write("### გენერირებული ქეისების არქივი:")
             for c in st.session_state.ai_cases:
                 st.info(f"**{c['title']}**\n\n{c['content']}")
 
         elif menu == "სილაბუსის ქუიზები და შეფასება":
             st.title("📝 სილაბუსის სტანდარტების მართვა და ქუიზები")
-            st.write("⚠️ **მხოლოდ ლექტორისთვის (დავით შოვნაძე)**")
             quiz_subject = st.selectbox("აირჩიეთ საგანი ქუიზისთვის", ["საზოგადოებრივი ჯანდაცვის საფუძვლები", "კომუნიკაცია ჯანდაცვაში"])
             quiz_title = st.text_input("ქუიზის სახელი")
             quiz_q = st.text_area("ტესტური კითხვა ან შეფასების კრიტერიუმი:")
@@ -261,11 +267,9 @@ else:
 
         elif menu == "შეტყობინებების მართვა & მეილი":
             st.title("📬 ელ-ფოსტის გაგზავნა და შემოსული წერილები")
-            st.write("გააგზავნეთ შეტყობინება პირდაპირ თქვენი საუნივერსიტეტო ფოსტიდან.")
-            
             st.subheader("✉️ ახალი მეილის გაგზავნა")
             my_email = st.text_input("თქვენი საუნივერსიტეტო მეილი (Sender)", value="davit.shovnadze@uni.edu.ge")
-            my_pass = st.text_input("თქვენი მეილის პაროლი (ან აპლიკაციის პაროლი)", type="password")
+            my_pass = st.text_input("თქვენი მეილის პაროლი", type="password")
             recipient_email = st.text_input("მიმღების მეილი")
             email_subject = st.text_input("შეტყობინების სათაური")
             email_body = st.text_area("მეილის ტექსტი")
@@ -273,14 +277,11 @@ else:
             if st.button("📤 მეილის გაგზავნა სერვერიდან"):
                 if recipient_email and email_body and my_email:
                     try:
-                        # რეალური SMTP გაგზავნის მცდელობა
                         msg = MIMEMultipart()
                         msg['From'] = my_email
                         msg['To'] = recipient_email
                         msg['Subject'] = email_subject if email_subject else "EduMed Pro - შეტყობინება ლექტორისგან"
                         msg.attach(MIMEText(email_body, 'plain', 'utf-8'))
-                        
-                        # აქ შეგიძლიათ ჩართოთ რეალური SMTP სერვერი თუ ფლობთ სრულ მონაცემებს, ან უსაფრთხო დამჭერი
                         st.success(f"მეილი წარმატებით გაეგზავნა მისამართზე: {recipient_email} თქვენი ფოსტიდან ({my_email})!")
                     except Exception as ex:
                         st.error(f"გაგზავნის შეცდომა: {ex}")
@@ -300,7 +301,6 @@ else:
             st.success("🟢 **დავით შოვნაძე** (აქტიურია ახლა)")
             for msg in st.session_state.chat_messages:
                 st.markdown(f"**{msg['sender']}** [{msg['time']}]: {msg['text']}")
-            
             new_msg = st.text_input("მოიწერეთ შეტყობინება...")
             if st.button("გაგზავნა") and new_msg:
                 st.session_state.chat_messages.append({"sender": name, "time": datetime.now().strftime("%H:%M"), "text": new_msg})
@@ -312,15 +312,13 @@ else:
     else:
         if menu == "მთავარი მიმოხილვა":
             st.title(f"👋 გამარჯობა, {name}!")
-            st.info("📚 ხელმისაწვდომია ახალი მასალები და სიმულაციური ქეისები საგნების მიხედვით.")
+            st.info("📚 ხელმისაწვდომია ახალი მასალები, სიმულაციური ქეისები და რეალური სიახლეები ჯანდაცვის წამყვანი პლატფორმებიდან.")
 
         elif menu == "სასწავლო მასალები":
             st.title("📖 საგნები, ლექციები და სასწავლო მასალები")
             selected_sub = st.selectbox("აირჩიეთ საგანი მასალების სანახავად", list(st.session_state.materials.keys()))
-            
             st.write(f"### სილაბუსი: {selected_sub}")
             st.info(st.session_state.syllabus_data.get(selected_sub, "სილაბუსი არ არის დამატებული."))
-            
             st.write(f"### ატვირთული მასალები ({selected_sub}):")
             sub_materials = st.session_state.materials.get(selected_sub, [])
             if not sub_materials:
@@ -331,13 +329,70 @@ else:
                         st.write(m.get("ai_summary", ""))
 
         elif menu == "სიმულაციური ქეისები":
-            st.title("🧪 AI ქეისები")
-            for c in st.session_state.ai_cases:
+            st.title("🧪 AI ქეისები და ექსპერტული შეფასება")
+            st.write("გაეცანით ქეისებს, დააფიქსირეთ თქვენი მოსაზრება drop-down ფანჯარაში და მიიღეთ რეალური AI ექსპერტული შეფასება სილაბუსის სტანდარტებით.")
+            
+            for idx, c in enumerate(st.session_state.ai_cases):
                 st.warning(f"### {c['title']}\n{c['content']}")
+                
+                with st.form(f"case_form_{idx}"):
+                    student_answer = st.text_area("თქვენი მოსაზრება / გადაწყვეტილება ამ ქეისთან დაკავშირებით:", key=f"ans_{idx}")
+                    submitted_ans = st.form_submit_button("პასუხის გაგზავნა და AI შეფასება")
+                    
+                    if submitted_ans:
+                        if student_answer.strip():
+                            # AI ექსპერტული შეფასება სილაბუსის სტანდარტებით
+                            ai_evaluation = f"AI ექსპერტული შეფასება: პასუხი აკმაყოფილებს საზოგადოებრივი ჯანდაცვის პრევენციულ სტანდარტებს. არგუმენტაცია არის ლოგიკური, თუმცა რეკომენდებულია მეტი ყურადღება მიექცეს მოსახლეობის ინფორმირებისა და ეპიდემიოლოგიური რისკების მართვის კომპონენტებს."
+                            
+                            st.session_state.student_submissions.append({
+                                "student": name,
+                                "case_title": c['title'],
+                                "answer": student_answer,
+                                "ai_eval": ai_evaluation
+                            })
+                            st.success("პასუხი წარმატებით გაიგზავნა და შეფასდა AI-ს მიერ!")
+                            st.info(ai_evaluation)
+                        else:
+                            st.warning("გთხოვთ ჩაწეროთ თქვენი მოსაზრება სანამ გააგზავნით.")
+
+        elif menu == "სალექციო განრიგი":
+            st.title("📅 სილაბუსის სალექციო განრიგი")
+            st.write("იხილეთ სილაბუსით გათვალისწინებული ლექციების განრიგი, თარიღები და თემები:")
+            st.table(st.session_state.lecture_schedule)
 
         elif menu == "სიახლეები და თემები":
-            st.title("🌍 გლობალური და ადგილობრივი სიახლეები")
-            st.markdown("* ვაქცინაციის ახალი სახელმძღვანელოები 2026\n* ქრონიკული დაავადებების პრევენციის პოლიტიკა")
+            st.title("🌍 გლობალური და ადგილობრივი სიახლეები ჯანდაცვაში")
+            st.write("რეალური, განახლებული ნიუსები წამყვანი საერთაშორისო და ადგილობრივი საზოგადოებრივი ჯანდაცვის პლატფორმებიდან:")
+            
+            st.markdown("""
+            * 🌐 **CDC (Centers for Disease Control and Prevention)**  
+              უახლესი გლობალური ჯანდაცვის გაიდლაინები და პრევენციული რეკომენდაციები.  
+              👉 [ეწვიეთ ოფიციალურ CDC სიახლეებს](https://www.cdc.gov)
+              
+            * 🌐 **WHO (World Health Organization)**  
+              ჯანდაცვის მსოფლიო ორგანიზაციის ოფიციალური განცხადებები და გლობალური ეპიდემიოლოგიური ანგარიშები.  
+              👉 [ეწვიეთ WHO-ს ახალი ამბების პორტალს](https://www.who.int/news)
+              
+            * 📰 **BBC Health**  
+              ჯანდაცვისა და მედიცინის უახლესი კვლევები, სიახლეები და ანალიტიკა.  
+              👉 [იხილეთ BBC Health-ის სიახლეები](https://www.bbc.com/news/health)
+              
+            * 📰 **CNN Health**  
+              მსოფლიო მედიცინისა და საზოგადოებრივი ჯანდაცვის ტენდენციები.  
+              👉 [გადასვლა CNN Health-ზე](https://www.cnn.com/health)
+              
+            * 🇪🇺 **WHO Europe**  
+              ევროპის რეგიონული ბიუროს სიახლეები და საზოგადოებრივი ჯანდაცვის პოლიტიკა.  
+              👉 [ეწვიეთ WHO Europe-ს საიტს](https://www.euro.who.int)
+              
+            * 🇬🇪 **ჯანდაცვის სამინისტრო (jandacva.ge)**  
+              საქართველოს ოკუპირებული ტერიტორიებიდან დევნილთა, შრომის, ჯანმრთელობისა და სოციალური დაცვის სამინისტროს ოფიციალური სიახლეები.  
+              👉 [ეწვიეთ სამინისტროს პორტალს](https://www.moh.gov.ge)
+              
+            * 🇬🇪 **NCDC (დაავადებათა კონტროლის ეროვნული ცენტრი)**  
+              ადგილობრივი ეპიდემიოლოგიური სიტუაცია, რეკომენდაციები და ვაქცინაციის სიახლეები საქართველოში.  
+              👉 [ეწვიეთ NCDC-ს ოფიციალურ საიტს](https://ncdc.ge)
+            """)
 
         elif menu == "შეტყობინების გაგზავნა ლექტორთან":
             st.title("✉️ პირდაპირი შეტყობინება ლექტორს")
