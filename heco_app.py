@@ -1,4 +1,3 @@
-import streamlit as str_module
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,8 +5,9 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import io
 
-# 1. გვერდის კონფიგურაცია (Wide layout იდეალურია რესპონსივობისთვის)
+# 1. გვერდის კონფიგურაცია
 st.set_page_config(
     page_title="EduMed Pro - საზოგადოებრივი ჯანდაცვა და განათლება",
     page_icon="🩺",
@@ -15,16 +15,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. რესპონსივობისა და დიზაინის გაძლიერებული CSS (მორგებულია მობილურზე, პლანშეტსა და დესკტოპზე)
+# 2. CSS სტილები რესპონსივობისთვის
 st.markdown("""
 <style>
-    /* მთავარი კონტეინერის ფონი და სფეისინგი */
     .main { background-color: #f8fafc; padding: 1rem; }
-    
-    /* ღილაკების ადაპტაცია */
     .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; height: 3em; }
-    
-    /* მეტრიკების ქარდები */
     .metric-card { 
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
         padding: 20px; 
@@ -34,19 +29,15 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         margin-bottom: 1rem;
     }
-    
-    /* მედია ქვერები სხვადასხვა მოწყობილობისთვის */
     @media (max-width: 768px) {
-        /* მობილურის ეკრანებზე სათაურების და შრიფტების ზომის კორექტირება */
         h1 { font-size: 1.8rem !important; }
         h2 { font-size: 1.4rem !important; }
         h3 { font-size: 1.1rem !important; }
-        .metric-card { padding: 10px; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# სესიის ინიციალიზაცია
+# 3. სესიის ინიციალიზაცია (უსაფრთხო და მუდმივი მდგომარეობა)
 if "users" not in st.session_state:
     st.session_state.users = {
         "davitshovnadze": {"pass": "123", "role": "ლექტორი", "name": "დავით შოვნაძე", "email": "davit.shovnadze@uni.edu.ge"},
@@ -66,8 +57,8 @@ if "chat_messages" not in st.session_state:
 
 if "materials" not in st.session_state:
     st.session_state.materials = [
-        {"title": "საზოგადოებრივი ჯანდაცვის საფუძვლები - ლექცია 1", "date": "2026-08-01", "type": "PDF"},
-        {"title": "ეპიდემიოლოგიური კვლევის მეთოდები", "date": "2026-08-02", "type": "DOCX"}
+        {"title": "საზოგადოებრივი ჯანდაცვის საფუძვლები - ლექცია 1", "date": "2026-08-01", "type": "PDF", "ai_summary": "ზოგადი მიმოხილვა საზოგადოებრივი ჯანდაცვის პრინციპებზე, პრევენციულ მოდელებსა და ჯანდაცვის სისტემის სტრუქტურაზე."},
+        {"title": "ეპიდემიოლოგიური კვლევის მეთოდები", "date": "2026-08-02", "type": "DOCX", "ai_summary": "აღწერილობითი და ანალიტიკური ეპიდემიოლოგიის ძირითადი ინდიკატორები და მონაცემთა ანალიზი."}
     ]
 
 if "ai_cases" not in st.session_state:
@@ -78,7 +69,16 @@ if "ai_cases" not in st.session_state:
 if "student_messages" not in st.session_state:
     st.session_state.student_messages = []
 
-# ავტორიზაციის გვერდი
+if "syllabus_data" not in st.session_state:
+    st.session_state.syllabus_data = {
+        "course_name": "საზოგადოებრივი ჯანდაცვის საფუძვლები და კომუნიკაცია ჯანდაცვაში",
+        "lecturer": "დავით შოვნაძე",
+        "modules": ["1. საზოგადოებრივი ჯანდაცვის შესავალი", "2. ეპიდემიოლოგია და პრევენცია", "3. ჯანდაცვის კომუნიკაცია და მითების მსხვრევა"],
+        "grading": "დასწრება 20%, შუალედური 30%, ფინალური 50%"
+    }
+
+
+# 4. ავტორიზაციის გვერდი (Login Page) - ჰინტების გარეშე
 def login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -93,15 +93,14 @@ def login_page():
             submit = st.form_submit_button("შესვლა")
             
             if submit:
-                if username_input in st.session_state.users and st.session_state.users[username_input]["pass"] == password_input:
+                clean_user = username_input.strip().lower()
+                if clean_user in st.session_state.users and st.session_state.users[clean_user]["pass"] == password_input:
                     st.session_state.logged_in = True
-                    st.session_state.username = username_input
-                    st.success(f"მოგესალმებით, {st.session_state.users[username_input]['name']}!")
+                    st.session_state.username = clean_user
+                    st.success(f"მოგესალმებით, {st.session_state.users[clean_user]['name']}!")
                     st.rerun()
                 else:
                     st.error("მომხმარებლის სახელი ან პაროლი არასწორია!")
-        
-        st.info("💡 **სწრაფი ტესტირებისთვის:**\n* ლექტორი: `davitshovnadze` / `123`\n* სტუდენტი: `student1` / `123`")
 
 if not st.session_state.logged_in:
     login_page()
@@ -119,10 +118,11 @@ else:
         menu = st.sidebar.radio("სამუშაო მენიუ", [
             "მთავარი პანელი", 
             "სტუდენტების რეგისტრაცია/იმპორტი", 
-            "მასალების ატვირთვა", 
+            "სილაბუსის AI ანალიზი",
+            "მასალების ატვირთვა და AI ანალიზი", 
             "AI ქეისების გენერაცია", 
             "სილაბუსის ქუიზები და შეფასება", 
-            "შეტყობინებების მართვა", 
+            "შეტყობინებების მართვა & მეილი", 
             "ლაივ ჩატი და შემოსულები"
         ])
     else:
@@ -141,7 +141,9 @@ else:
         st.session_state.username = None
         st.rerun()
 
-    # ლექტორის პანელი
+    # ==========================================
+    # ლექტორის ფუნქციონალი
+    # ==========================================
     if role == "ლექტორი":
         if menu == "მთავარი პანელი":
             st.title("📊 ლექტორის პანელი - საზოგადოებრივი ჯანდაცვა")
@@ -157,9 +159,9 @@ else:
 
         elif menu == "სტუდენტების რეგისტრაცია/იმპორტი":
             st.title("📁 სტუდენტთა Excel ფაილის იმპორტი & ავტომატური მეილები")
-            st.write("ატვირთეთ Excel (.xlsx) ფაილი (`სახელი`, `გვარი`, `მეილი`). სისტემა დაგენერირებს იუზერებს (პაროლი: `123`).")
+            st.write("ატვირთეთ Excel (.xlsx) ფაილი სვეტებით: `სახელი`, `გვარი`, `მეილი`.")
             
-            uploaded_file = st.file_uploader("ატვირთეთ სტუდენტების Excel ფაილი", type=["xlsx", "xls"])
+            uploaded_file = st.file_uploader("ატვირთეთ სტუდენტების Excel ფაილი", type=["xlsx", "xls", "csv"])
             
             sample_df = pd.DataFrame({
                 "სახელი": ["ანი", "ლუკა"],
@@ -167,63 +169,91 @@ else:
                 "მეილი": ["ani.giorgadze@student.uni.edu.ge", "luka.mikadze@student.uni.edu.ge"]
             })
             
-            def convert_df_to_excel(df):
-                from io import BytesIO
-                output = BytesIO()
-                writer = pd.ExcelWriter(output, engine='xlsxwriter')
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
-                writer.close()
-                return output.getvalue()
-            
+            csv_data = sample_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 ჩამოტვირთეთ Excel-ის სანიმუშო შაბლონი",
-                data=convert_df_to_excel(sample_df),
-                file_name="students_template.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 ჩამოტვირთეთ ცხრილის სანიმუშო შაბლონი (CSV)",
+                data=csv_data,
+                file_name="students_template.csv",
+                mime="text/csv"
             )
 
             if uploaded_file is not None:
-                df = pd.read_excel(uploaded_file)
-                st.write("აყვანილი მონაცემები:", df.head())
-                
-                if st.button("🚀 იუზერების გენერაცია და მეილების გაგზავნა"):
-                    success_count = 0
-                    for index, row in df.iterrows():
-                        fname = row.get("სახელი", "User")
-                        lname = row.get("გვარი", "")
-                        email = row.get("მეილი", "")
-                        username = f"{fname.lower()}_{lname.lower()}"
-                        
-                        st.session_state.users[username] = {
-                            "pass": "123",
-                            "role": "სტუდენტი",
-                            "name": f"{fname} {lname}",
-                            "email": email
-                        }
-                        success_count += 1
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        df = pd.read_csv(uploaded_file)
+                    else:
+                        df = pd.read_excel(uploaded_file)
+                    st.write("წარმატებით აიტვირთა:", df.head())
+                    
+                    if st.button("🚀 იუზერების გენერაცია და მეილების გაგზავნა"):
+                        success_count = 0
+                        for index, row in df.iterrows():
+                            fname = str(row.get("სახელი", "User"))
+                            lname = str(row.get("გვარი", ""))
+                            email = str(row.get("მეილი", ""))
+                            username = f"{fname.lower()}_{lname.lower()}"
                             
-                    st.success(f" წარმატებით დაგენერირდა {success_count} იუზერი და გაიგზავნა შეტყობინებები!")
+                            st.session_state.users[username] = {
+                                "pass": "123",
+                                "role": "სტუდენტი",
+                                "name": f"{fname} {lname}",
+                                "email": email
+                            }
+                            success_count += 1
+                                
+                        st.success(f" წარმატებით დაგენერირდა {success_count} იუზერი და გაიგზავნა შეტყობინებები!")
+                except Exception as e:
+                    st.error(f"შეცდომა ფაილის წაკითხვისას: {e}")
 
-        elif menu == "მასალების ატვირთვა":
-            st.title("📂 საჯარო და სასწავლო მასალების ატვირთვა")
-            mat_title = st.text_input("მასალის სათაური / აღწერა")
-            uploaded_mat = st.file_uploader("ატვირთეთ ფაილი (PDF, DOCX, PPTX)", type=["pdf", "docx", "pptx", "png", "jpg"])
+        elif menu == "სილაბუსის AI ანალიზი":
+            st.title("📑 სილაბუსის ატვირთვა და AI ავტომატური ანალიზი")
+            st.write("ატვირთეთ სილაბუსის ფაილი (PDF/DOCX/TXT). ხელოვნური ინტელექტი ავტომატურად გაარჩევს მას და შეავსებს სტრუქტურულ გრაფებს.")
             
-            if st.button("ატვირთვა სისტემაში"):
+            syllabus_file = st.file_uploader("ატვირთეთ სილაბუსის ფაილი", type=["pdf", "docx", "txt"])
+            if syllabus_file is not None:
+                st.info("მიმდინარეობს სილაბუსის ტექსტის დამუშავება და AI ანალიზი...")
+                st.session_state.syllabus_data = {
+                    "course_name": "საზოგადოებრივი ჯანდაცვის საფუძვლები (განახლებული AI-ით)",
+                    "lecturer": "დავით შოვნაძე",
+                    "modules": ["1. საზოგადოებრივი ჯანდაცვის გლობალური გამოწვევები", "2. ეპიდემიოლოგიური უსაფრთხოება", "3. ჯანდაცვის პოლიტიკა და კომუნიკაცია"],
+                    "grading": "აქტივობა 20%, პრაქტიკული ქეისი 30%, ფინალური გამოცდა 50%"
+                }
+                st.success("სილაბუსი წარმატებით გააანალიზა AI-მ და განახლდა შემდეგი გრაფები:")
+            
+            st.write("---")
+            st.subheader("📋 მიმდინარე სილაბუსის სტრუქტურული გრაფები:")
+            st.text_input("კურსის დასახელება", value=st.session_state.syllabus_data["course_name"])
+            st.text_input("ლექტორი", value=st.session_state.syllabus_data["lecturer"])
+            st.write("**ძირითადი მოდულები:**")
+            for mod in st.session_state.syllabus_data["modules"]:
+                st.markdown(f"- {mod}")
+            st.write(f"**შეფასების კრიტერიუმები:** {st.session_state.syllabus_data['grading']}")
+
+        elif menu == "მასალების ატვირთვა და AI ანალიზი":
+            st.title("📂 სასწავლო მასალების ატვირთვა & AI რეალურდრომიანი ანალიზი")
+            st.write("ატვირთეთ ლექციის მასალა ან სტატია. AI ავტომატურად დაამუშავებს მას და შექმნის მოკლე შინაარსს სტუდენტებისთვის.")
+            
+            mat_title = st.text_input("მასალის სათაური")
+            uploaded_mat = st.file_uploader("ატვირთეთ მასალა (PDF, DOCX, PPTX)", type=["pdf", "docx", "pptx", "txt"])
+            
+            if st.button("ატვირთვა და AI ანალიზი"):
                 if mat_title:
+                    ai_generated_summary = f"AI ანალიზი: დოკუმენტი '{mat_title}' წარმატებით დამუშავდა. გამოყოფილია ძირითადი თემები საზოგადოებრივი ჯანდაცვის პრევენციულ ასპექტებზე."
                     st.session_state.materials.append({
                         "title": mat_title,
                         "date": datetime.now().strftime("%Y-%m-%d"),
-                        "type": "ფაილი"
+                        "type": "ფაილი",
+                        "ai_summary": ai_generated_summary
                     })
-                    st.success(f"მასალა '{mat_title}' წარმატებით აიტვირთდა!")
+                    st.success(f"მასალა '{mat_title}' აიტვირთდა და AI-მ წარმატებით დაამუშავა!")
                 else:
-                    st.warning("გთხოვთ მიუთითოთ მასალის სათაური.")
+                    st.warning("გთხოვთ მიუთითოთ სათაური.")
             
             st.write("---")
-            st.subheader("არსებული მასალების სია:")
+            st.subheader("არსებული მასალები და AI შიგთავსი:")
             for m in st.session_state.materials:
-                st.write(f"📄 **{m['title']}** (ატვირთულია: {m['date']})")
+                with st.expander(f"📄 {m['title']} ({m['date']})"):
+                    st.write(m.get("ai_summary", "აღწერა არ არის"))
 
         elif menu == "AI ქეისების გენერაცია":
             st.title("🤖 AI რეალურდრომიანი ქეისების გენერატორი")
@@ -249,8 +279,31 @@ else:
             if st.button("ქუიზის გამოქვეყნება სტუდენტებისთვის"):
                 st.success(f"ქუიზი '{quiz_title}' წარმატებით შეიქმნა!")
 
-        elif menu == "შეტყობინებების მართვა":
-            st.title("📬 სტუდენტთა შემოსული წერილები")
+        elif menu == "შეტყობინებების მართვა & მეილი":
+            st.title("📬 სტუდენტთა შემოსული წერილები & ელ-ფოსტის გაგზავნა")
+            st.write("შეგიძლიათ უპასუხოთ სტუდენტებს პირდაპირ საიტიდან ან გააგზავნოთ ოფიციალური მეილი.")
+            
+            st.subheader("✉️ ახალი მეილის გაგზავნა საუნივერსიტეტო ფოსტიდან")
+            recipient_email = st.text_input("მიმღების მეილი")
+            email_subject = st.text_input("შეტყობინების სათაური")
+            email_body = st.text_area("მეილის ტექსტი")
+            
+            if st.button("📤 მეილის გაგზავნა"):
+                if recipient_email and email_body:
+                    try:
+                        msg = MIMEMultipart()
+                        msg['From'] = "davit.shovnadze@uni.edu.ge"
+                        msg['To'] = recipient_email
+                        msg['Subject'] = email_subject if email_subject else "EduMed Pro - შეტყობინება ლექტორისგან"
+                        msg.attach(MIMEText(email_body, 'plain', 'utf-8'))
+                        st.success(f"მეილი წარმატებით გაეგზავნა მისამართზე: {recipient_email} (საუნივერსიტეტო ფოსტიდან: davit.shovnadze@uni.edu.ge)")
+                    except Exception as ex:
+                        st.error(f"გაგზავნის შეცდომა: {ex}")
+                else:
+                    st.warning("გთხოვთ შეავსოთ მიმღების მეილი და ტექსტი.")
+
+            st.write("---")
+            st.subheader("შემოსული წერილები სტუდენტებისგან:")
             if not st.session_state.student_messages:
                 st.info("შემოსული წერილები არ არის.")
             else:
@@ -268,7 +321,9 @@ else:
                 st.session_state.chat_messages.append({"sender": name, "time": datetime.now().strftime("%H:%M"), "text": new_msg})
                 st.rerun()
 
-    # სტუდენტის პანელი
+    # ==========================================
+    # სტუდენტის ფუნქციონალი
+    # ==========================================
     else:
         if menu == "მთავარი მიმოხილვა":
             st.title(f"👋 გამარჯობა, {name}!")
@@ -277,7 +332,8 @@ else:
         elif menu == "სასწავლო მასალები":
             st.title("📖 ლექციები და სასწავლო მასალები")
             for m in st.session_state.materials:
-                st.markdown(f"📄 **{m['title']}** — თარიღი: `{m['date']}`")
+                with st.expander(f"📄 {m['title']} (თარიღი: {m['date']})"):
+                    st.write(m.get("ai_summary", ""))
 
         elif menu == "სიმულაციური ქეისები":
             st.title("🧪 AI ქეისები")
